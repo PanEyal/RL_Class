@@ -8,7 +8,7 @@ from itertools import product
 
 # State representation: Tuple(sum_player, sum_dealer, usable_ace)
 ALL_STATES = list(product(range(4, 22), range(1, 12), range(2)))
-# Action representation: 0 -> stick, 1 -> hit
+# Action representation: 0 -> stick, 1 -> hit, 2 -> special action only from terminating states
 ALL_ACTIONS = list(range(2))
 
 # enum for finished states:
@@ -99,12 +99,12 @@ def approximate_policy_evaluation(v, pi, tr_matrix, r_s_a, k=5):
 
 def policy_improvement(v, pi, tr_matrix, r_s_a):
     for state in ALL_STATES_WITH_END:
-        max_value = 0
-        max_action = 0
+        max_value = None
+        max_action = None
         for action in ALL_ACTIONS:
             value = r_s_a[state][action] + sum(tr_matrix[state][action][next_state] * v[next_state]
                                                for next_state in ALL_STATES_WITH_END)
-            if value > max_value:
+            if max_action is None or value > max_value:
                 max_value = value
                 max_action = action
         pi[state] = max_action
