@@ -28,7 +28,7 @@ def transition_matrix(sample_size=10 ** 5, should_print=True):
                                [0. for _ in ALL_ACTIONS]))
                       for _ in ALL_STATES_WITH_END]))
 
-    # n_s_a: Dict(state -> Dict(action -> Dict(states -> Counter)))
+    # n_s_a: Dict(state -> Dict(action -> Dict(states -> counter)))
     n_s_a_ns = dict(zip(ALL_STATES_WITH_END,
                         [dict(zip(ALL_ACTIONS,
                                   [dict(zip(ALL_STATES_WITH_END,
@@ -56,7 +56,7 @@ def transition_matrix(sample_size=10 ** 5, should_print=True):
         if terminated or truncated:
             observation, info = env.reset()
 
-    # tr_matrix: Dict(state -> Dict(action -> Dict(states -> Probability)))
+    # tr_matrix: Dict(state -> Dict(action -> Dict(states -> probability)))
     tr_matrix = dict(zip(ALL_STATES_WITH_END,
                          [dict(zip(ALL_ACTIONS,
                                    [dict(zip(ALL_STATES_WITH_END,
@@ -79,7 +79,7 @@ def transition_matrix(sample_size=10 ** 5, should_print=True):
 
 
 def reward_function():
-    # r_s_a: Dict(state -> Dict(action -> Counter))
+    # r_s_a: Dict(state -> Dict(action -> counter))
     r_s_a = dict(zip(ALL_STATES_WITH_END,
                      [dict(zip(ALL_ACTIONS, [0. for _ in ALL_ACTIONS])) for _ in ALL_STATES]
                      + [dict(zip(ALL_ACTIONS, [1. for _ in ALL_ACTIONS]))]
@@ -175,7 +175,7 @@ def monte_carlo_policy_iteration(tr_matrix, r_s_a, pi=None, episodes=1000, first
         if len(pi_diff) == 0:
             print(f"Policy iteration converged after {counter} iterations.")
             break
-        if counter >= 100:
+        if counter >= 1000:
             print(f"Policy iteration did not converge after {counter} iterations.")
             break
         print(f"counter: {counter}, diff in pi: {len(pi_diff)}", end='\r')
@@ -183,8 +183,8 @@ def monte_carlo_policy_iteration(tr_matrix, r_s_a, pi=None, episodes=1000, first
     return v, pi, values_avg
 
 
-def sarsa(env, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
-    # q: Dict(state -> Dict(action -> Value))
+def sarsa(env, pi, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
+    # q: Dict(state -> Dict(action -> value))
     q = dict(zip(ALL_STATES_WITH_END,
                  [dict(zip(ALL_ACTIONS,
                            [0. for _ in ALL_ACTIONS]))
@@ -192,36 +192,42 @@ def sarsa(env, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
 
     for _ in range(episodes):
         state, info = env.reset()
-        policy_s = get_probs(q[state], epsilon)
-        action = np.random.choice(ALL_ACTIONS, p=policy_s)
+        action_probs = get_action_probs(pi[state], epsilon)
+        action = np.random.choice(ALL_ACTIONS, p=action_probs)
         while True:
             next_state, reward, terminated, truncated, info = env.step(action)
-            if not terminated and not truncated:
-                policy_s = get_probs(q[next_state], epsilon)
-                next_action = np.random.choice(ALL_ACTIONS, p=policy_s)
-                q[state][action] = q[state][action] + alpha * (
-                        reward + gamma * q[next_state][next_action] - q[state][action])
-                state = next_state
-                action = next_action
-            else:
-                q[state][action] = q[state][action] + alpha * (reward - q[state][action])
+            if terminated or truncated:
+                if reward > 0:
+                    next_state = WIN
+                elif reward == 0:
+                    next_state = DRAW
+                else:  # reward == -1
+                    next_state = LOSE
+
+            action_probs = get_action_probs(pi[next_state], epsilon)
+            next_action = np.random.choice(ALL_ACTIONS, p=action_probs)
+            q[state][action] += alpha * (reward + gamma * q[next_state][next_action] - q[state][action])
+            state = next_state
+            action = next_action
+
+            if terminated or truncated:
                 break
 
     return q
 
 
-def get_probs(q_s, epsilon):
-    policy_s = np.ones(len(ALL_ACTIONS)) * epsilon / len(ALL_ACTIONS)
-    best_a = max(q_s, key=q_s.get)
-    policy_s[best_a] = 1 - epsilon + (epsilon / len(ALL_ACTIONS))
-    return policy_s
+def get_action_probs(best_a, epsilon):
+    action_probs = [epsilon / len(ALL_ACTIONS) for _ in ALL_ACTIONS]
+    action_probs[best_a] += 1 - epsilon
+    return action_probs
 
 
 def create_greedy_policy(q):
+    # pi: Dict(state -> action)
     pi = dict(zip(ALL_STATES_WITH_END,
                   [0 for _ in ALL_STATES_WITH_END]))
     for state in ALL_STATES_WITH_END:
-        pi[state] = np.argmax(q[state])
+        pi[state] = max(q[state], key=q[state].get)
     return pi
 
 
@@ -237,14 +243,14 @@ def calc_q_avg(q):
 
 def sarsa_policy_iteration(episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
     pi = dict(zip(ALL_STATES_WITH_END,
-                  [0 for _ in ALL_STATES_WITH_END]))
+                  [1 for _ in ALL_STATES_WITH_END]))
 
     env = gym.make('Blackjack-v1', natural=False, sab=False)
     values_avg = []
     counter = 0
     while True:
         counter += 1
-        q = sarsa(env, episodes=episodes, alpha=alpha, gamma=gamma, epsilon=epsilon)
+        q = sarsa(env, pi, episodes=episodes, alpha=alpha, gamma=gamma, epsilon=epsilon)
         values_avg.append(calc_q_avg(q))
         pi_old = pi.copy()
         pi = create_greedy_policy(q)
@@ -253,7 +259,7 @@ def sarsa_policy_iteration(episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
         if len(pi_diff) == 0:
             print(f"Policy iteration converged after {counter} iterations.")
             break
-        if counter >= 100:
+        if counter >= 1000:
             print(f"Policy iteration did not converge after {counter} iterations.")
             break
         print(f"counter: {counter}, diff in pi: {len(pi_diff)}", end='\r')
