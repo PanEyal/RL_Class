@@ -1,8 +1,6 @@
 import numpy as np
 import gymnasium as gym
 
-from itertools import product
-
 # Here we will implement the policy iteration algorithm for the frozen_lake environment.
 
 # State representation: Integer from 0 to 15
@@ -10,7 +8,7 @@ ALL_STATES = list(range(16))
 # Action representation: 0 -> left, 1 -> down, 2 -> right, 3 -> up
 ALL_ACTIONS = list(range(4))
 
-ITERATION_LIMIT = 500
+ITERATION_LIMIT = 10
 
 
 def play_episode(env, pi):
@@ -42,7 +40,7 @@ def first_visit_monte_carlo_policy_evaluation(env, pi, episodes=1000, gamma=1.0)
     return s_start / n_start
 
 
-def q_learning(env, q, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
+def q_learning(env, q, episodes=1000, alpha=0.1, gamma=1.0, index_of_episode=0):
     # q: Dict(state -> Dict(action -> value))
     if q is None:
         q = dict(zip(ALL_STATES,
@@ -50,19 +48,22 @@ def q_learning(env, q, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
                                [0. for _ in ALL_ACTIONS]))
                       for _ in ALL_STATES]))
 
-    for _ in range(episodes):
+    for i in range(episodes):
         state, info = env.reset()
-        action_probs = get_best_action_probs(q[state], epsilon)
-        action = np.random.choice(ALL_ACTIONS, p=action_probs)
         while True:
+            # choose action with e-greedy policy
+            action_probs = get_best_action_probs(q[state], 1 / (index_of_episode + i + 1))
+            action = np.random.choice(ALL_ACTIONS, p=action_probs)
+
             next_state, reward, terminated, truncated, info = env.step(action)
 
-            action_probs = get_best_action_probs(q[next_state], epsilon)
-            next_action = np.random.choice(ALL_ACTIONS, p=action_probs)
-            q[state][action] += alpha * (reward + gamma * q[next_state][next_action] - q[state][action])
-            state = next_state
-            action = next_action
+            # choose next action greedily
+            next_action_probs = get_best_action_probs(q[next_state], epsilon=0)
+            next_action = np.random.choice(ALL_ACTIONS, p=next_action_probs)
 
+            q[state][action] += alpha * (reward + gamma * q[next_state][next_action] - q[state][action])
+
+            state = next_state
             if terminated or truncated:
                 break
 
@@ -71,8 +72,12 @@ def q_learning(env, q, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
 
 def get_best_action_probs(state_actions, epsilon):
     action_probs = [epsilon / len(ALL_ACTIONS) for _ in ALL_ACTIONS]
-    best_a = max(state_actions, key=state_actions.get)
-    action_probs[best_a] += 1 - epsilon
+    action_p = np.array([state_actions[a] for a in state_actions.keys()])
+    if not np.all(action_p == action_p[0]): #if not all probabilities are the same
+        best_a = max(state_actions, key=state_actions.get)
+        action_probs[best_a] += 1 - epsilon
+    else:
+        action_probs = [1 / len(ALL_ACTIONS) for _ in ALL_ACTIONS]
     return action_probs
 
 
@@ -85,7 +90,7 @@ def create_greedy_policy(q):
     return pi
 
 
-def q_learning_policy_iteration(episodes=1000, alpha=0.1, gamma=0.95, epsilon=0.3):
+def q_learning_policy_iteration(episodes=1000, steps=10, alpha=0.1, gamma=0.95):
     pi = dict(zip(ALL_STATES,
                   [0 for _ in ALL_STATES]))
     q = None
@@ -95,19 +100,14 @@ def q_learning_policy_iteration(episodes=1000, alpha=0.1, gamma=0.95, epsilon=0.
     counter = 0
     while True:
         counter += 1
-        q = q_learning(env, q, episodes=episodes, alpha=alpha, gamma=gamma, epsilon=epsilon)
-        pi_old = pi.copy()
+        q = q_learning(env, q, episodes=episodes, alpha=alpha, gamma=gamma, index_of_episode=(counter - 1) * episodes)
+        # pi_old = pi.copy()
         pi = create_greedy_policy(q)
-        v_start = first_visit_monte_carlo_policy_evaluation(env, pi, episodes=1000, gamma=gamma)
+        v_start = first_visit_monte_carlo_policy_evaluation(env, pi, episodes=1000)
         v_start_list.append(v_start)
 
-        pi_diff = {k: pi[k] for k in pi if k in pi_old and pi[k] != pi_old[k]}
-        if len(pi_diff) == 0:
-            print(f"Policy iteration converged after {counter} iterations.")
+        # pi_diff = {k: pi[k] for k in pi if k in pi_old and pi[k] != pi_old[k]}
+        if counter >= steps:
             break
-        if counter >= ITERATION_LIMIT:
-            print(f"Policy iteration did not converge after {counter} iterations.")
-            break
-        print(f"counter: {counter}, diff in pi: {len(pi_diff)}", end='\r')
 
     return q, pi, v_start_list

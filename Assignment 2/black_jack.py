@@ -140,24 +140,26 @@ def monte_carlo_policy_evaluation(env, pi, v, episodes=1000, first_visit=True, g
         for i, (state, reward) in enumerate(reversed(episode), 1):
             g = gamma * g + reward
 
-            if first_visit and state in [other_state for other_state, _ in episode[:-i]]:
+            episode_until = [other_state for other_state, _ in episode[:-i]]
+            if first_visit and state in episode_until:
                 continue
             n[state] += 1
             s[state] += g
 
     for state in ALL_STATES_WITH_END:
-        v[state] = s[state] / n[state]
+        if n[state] != 0:
+            v[state] = s[state] / n[state]
 
     return v
 
 
 def calc_v_avg(v):
-    sum = 0
+    s = 0
     counter = 0
     for state in list(product(range(13, 17), range(7, 9), range(0, 1))):
-        sum += v[state]
+        s += v[state]
         counter += 1
-    return sum / counter
+    return s / counter
 
 
 def monte_carlo_policy_iteration(tr_matrix, r_s_a, pi=None, v=None, episodes=1000, first_visit=True, gamma=1.0):
@@ -276,70 +278,11 @@ def sarsa_policy_iteration(episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
     return q, pi, values_avg
 
 
-def q_learning(env, episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
-    # q: Dict(state -> Dict(action -> value))
-    q = dict(zip(ALL_STATES_WITH_END,
-                 [dict(zip(ALL_ACTIONS,
-                           [0. for _ in ALL_ACTIONS]))
-                  for _ in ALL_STATES_WITH_END]))
-
-    for _ in range(episodes):
-        state, info = env.reset()
-        action_probs = get_best_action_probs(q[state], epsilon)
-        action = np.random.choice(ALL_ACTIONS, p=action_probs)
-        while True:
-            next_state, reward, terminated, truncated, info = env.step(action)
-            if terminated or truncated:
-                if reward > 0:
-                    next_state = WIN
-                elif reward == 0:
-                    next_state = DRAW
-                else:  # reward == -1
-                    next_state = LOSE
-
-            action_probs = get_best_action_probs(q[next_state], epsilon)
-            next_action = np.random.choice(ALL_ACTIONS, p=action_probs)
-            q[state][action] += alpha * (reward + gamma * q[next_state][next_action] - q[state][action])
-            state = next_state
-            action = next_action
-
-            if terminated or truncated:
-                break
-
-    return q
-
-
 def get_best_action_probs(state_actions, epsilon):
     action_probs = [epsilon / len(ALL_ACTIONS) for _ in ALL_ACTIONS]
     best_a = max(state_actions, key=state_actions.get)
     action_probs[best_a] += 1 - epsilon
     return action_probs
-
-
-def q_learning_policy_iteration(episodes=1000, alpha=0.1, gamma=1.0, epsilon=0.3):
-    pi = dict(zip(ALL_STATES_WITH_END,
-                  [0 for _ in ALL_STATES_WITH_END]))
-
-    env = gym.make('Blackjack-v1', natural=False, sab=False)
-    values_avg = []
-    counter = 0
-    while True:
-        counter += 1
-        q = q_learning(env, episodes=episodes, alpha=alpha, gamma=gamma, epsilon=epsilon)
-        values_avg.append(calc_q_avg(q))
-        pi_old = pi.copy()
-        pi = create_greedy_policy(q)
-
-        pi_diff = {k: pi[k] for k in pi if k in pi_old and pi[k] != pi_old[k]}
-        if len(pi_diff) == 0:
-            print(f"Policy iteration converged after {counter} iterations.")
-            break
-        if counter >= ITERATION_LIMIT:
-            print(f"Policy iteration did not converge after {counter} iterations.")
-            break
-        print(f"counter: {counter}, diff in pi: {len(pi_diff)}", end='\r')
-
-    return q, pi, values_avg
 
 
 def play(pi):
