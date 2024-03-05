@@ -19,7 +19,6 @@ def create_tiling_grid(low, high, bins=(5, 5), offsets=(0.0, 0.0)):
     grid : list of array_like
         A list of arrays containing split points for each dimension.
     """
-
     low = np.array(low)
     high = np.array(high)
     print("LOW: ", low)
@@ -126,7 +125,7 @@ class FeaturesTable:
 class TiledFeaturesTable:
     """Composite Q-table with an internal tile coding scheme."""
 
-    def __init__(self, low, high, tiling_specs, action_size):
+    def __init__(self, low, high, bins, offsets, action_size):
         """Create tilings and initialize internal Q-table(s).
 
         Parameters
@@ -140,11 +139,21 @@ class TiledFeaturesTable:
         action_size : int
             Number of discrete actions in action space.
         """
-        self.tilings = create_tilings(low, high, tiling_specs)
-        self.state_sizes = [tuple(len(splits)+1 for splits in tiling_grid) for tiling_grid in self.tilings]
+        self.tiling_size = bins[0][0]
+        self.layers = len(bins)
+        self.tilings = create_tilings(low, high, bins, offsets)
+        self.state_sizes = [tuple(len(splits) + 1 for splits in tiling_grid) for tiling_grid in self.tilings]
         self.action_size = action_size
         self.q_tables = [FeaturesTable(state_size, self.action_size) for state_size in self.state_sizes]
         print("TiledQTable(): no. of internal tables = ", len(self.q_tables))
+
+    def get_features_vector(self, state, action):
+        encoded_state = tile_encode(state, self.tilings)
+        vec = np.zeros(self.tiling_size ** 2 * self.layers * self.action_size)
+        for i, (x, y) in enumerate(encoded_state):
+            vec[action * self.tiling_size ** 2 * self.layers + i * self.tiling_size ** 2 + (
+                        x * self.tiling_size + y)] = 1
+        return vec
 
     def get(self, state, action):
         """Get Q-value for given <state, action> pair.

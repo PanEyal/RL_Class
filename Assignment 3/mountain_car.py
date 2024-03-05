@@ -33,5 +33,36 @@ def get_q_value(state, action, w):
     feature_vec = features_table.get_features_vector(state, action)
     return feature_vec @ w
 
-a = create_tiling_grid([-1.2, -0.07], [0.6, 0.07], (4, 4), (0, 0))
-print(a)
+
+def QAC(steps=10000, gamma=0.95, alpha=0.5, beta=0.5):
+    env = gym.make('MountainCar-v0', render_mode='human')
+    n_features = features_table.tiling_size ** 2 * features_table.layers * features_table.action_size
+    theta = np.ones(n_features)
+    w = np.ones(n_features)
+
+    state, info = env.reset()
+    action = sample_action(state, theta)
+    rewards = []
+    curr_accumulated_reward = 0
+    for i in tqdm(range(steps), desc=f'QAC: r: {curr_accumulated_reward}'):
+        next_state, reward, terminated, truncated, info = env.step(action)
+        curr_accumulated_reward += reward
+        next_action = sample_action(next_state, theta)
+
+        td_error = reward + gamma * get_q_value(next_state, next_action, w) - get_q_value(state, action, w)
+        grad_policy = features_table.get_features_vector(state, action) - np.mean(
+            [features_table.get_features_vector(state, a) for a in ALL_ACTIONS])
+        theta += alpha * grad_policy * get_q_value(state, action, w)
+        w += beta * td_error * features_table.get_features_vector(state, action)
+
+        action = next_action
+        state = next_state
+
+        if terminated or truncated:
+            state, info = env.reset()
+            action = sample_action(state, theta)
+            rewards.append(curr_accumulated_reward)
+            curr_accumulated_reward = 0
+
+    env.close()
+    return w, theta, rewards
