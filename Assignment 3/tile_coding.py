@@ -24,15 +24,14 @@ def create_tiling_grid(low, high, bins=(5, 5), offsets=(0.0, 0.0)):
     high = np.array(high)
     print("LOW: ", low)
     print("HIGH: ", high)
-    tile_sizes = (high - low)/bins
+    tile_sizes = (high - low) / bins
 
-    grid = np.array([np.zeros(bins[0]-1), np.zeros(bins[1]-1)])
+    grid = np.array([np.zeros(bins[0] - 1), np.zeros(bins[1] - 1)])
     for dim in range(0, 2):
         for tile in range(1, bins[dim]):
-            grid[dim][tile-1] = tile*tile_sizes[dim] + low[dim] + offsets[dim]
+            grid[dim][tile - 1] = tile * tile_sizes[dim] + low[dim] + offsets[dim]
 
     return grid
-
 
 
 def create_tilings(low, high, bins, offsets):
@@ -52,12 +51,11 @@ def create_tilings(low, high, bins, offsets):
     """
 
     tilings = []
-    for bins, offsets in zip(bins, offsets):
-        tilings.append(create_tiling_grid(low, high, bins, offsets))
+    for bins_i, offsets_i in zip(bins, offsets):
+        tilings.append(create_tiling_grid(low, high, bins_i, offsets_i))
     tilings = tilings
 
     return tilings
-
 
 
 def discretize(sample, grid):
@@ -103,8 +101,7 @@ def tile_encode(sample, tilings, flatten=False):
     return encoded
 
 
-
-class QTable:
+class FeaturesTable:
     """Simple Q-table."""
 
     def __init__(self, state_size, action_size):
@@ -126,7 +123,7 @@ class QTable:
         print("QTable(): size =", self.q_table.shape)
 
 
-class TiledQTable:
+class TiledFeaturesTable:
     """Composite Q-table with an internal tile coding scheme."""
 
     def __init__(self, low, high, tiling_specs, action_size):
@@ -146,7 +143,7 @@ class TiledQTable:
         self.tilings = create_tilings(low, high, tiling_specs)
         self.state_sizes = [tuple(len(splits)+1 for splits in tiling_grid) for tiling_grid in self.tilings]
         self.action_size = action_size
-        self.q_tables = [QTable(state_size, self.action_size) for state_size in self.state_sizes]
+        self.q_tables = [FeaturesTable(state_size, self.action_size) for state_size in self.state_sizes]
         print("TiledQTable(): no. of internal tables = ", len(self.q_tables))
 
     def get(self, state, action):
@@ -195,6 +192,5 @@ class TiledQTable:
         encoded_state = tile_encode(state, self.tilings)
 
         for tiling, q_table in zip(encoded_state, self.q_tables):
-
             old_value = q_table.q_table[tuple(tiling + (action,))]
-            q_table.q_table[tuple(tiling + (action,))] = alpha*value + (1.0-alpha)*old_value
+            q_table.q_table[tuple(tiling + (action,))] = alpha * value + (1.0 - alpha) * old_value
