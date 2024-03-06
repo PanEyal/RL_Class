@@ -4,10 +4,6 @@ from tqdm import tqdm
 
 
 class TileCoding:
-    # self.position_offsets = np.array([-0.1, 0, 0.1, 0.2])
-    # self.velocity_offsets = np.array([-0.01, 0, 0.01, 0.02])
-    # self.num_layers = 4
-    # self.num_tiles = 5
 
     def __init__(self):
         self.position_min, self.position_max = -1.2, 0.6
@@ -19,6 +15,7 @@ class TileCoding:
         self.layers_bins = []
         self.init_tilings()
 
+    # Create a layer of tiles
     def create_layer(self, position_offset=0.0, velocity_offset=0.0):
         position_bins = np.linspace(self.position_min + position_offset, self.position_max + position_offset,
                                     num=self.num_tiles + 1,
@@ -29,10 +26,12 @@ class TileCoding:
         layer = (position_bins, velocity_bins)
         return layer
 
+    # Create multiple layers of tiles
     def init_tilings(self):
         for i in range(self.num_layers):
             self.layers_bins.append(self.create_layer(self.position_offsets[i], self.velocity_offsets[i]))
 
+    # Encode the state into a binary vector
     def tile_encode(self, position, velocity):
         encoded_vec = np.zeros((self.num_tiles ** 2 * self.num_layers, 1))
         for i, (position_bins, velocity_bins) in enumerate(self.layers_bins):
@@ -41,29 +40,29 @@ class TileCoding:
             encoded_vec[position_i + velocity_i * self.num_tiles + i * self.num_tiles ** 2] = 1
         return encoded_vec
 
-
+# Get the action to take using the softmax policy
 def get_action(tile_coding, state, theta):
     features = tile_coding.tile_encode(state[0], state[1])
     action_probabilities = softmax(theta.T @ features)
     return np.random.choice(action_probabilities.shape[0], p=action_probabilities.flatten())
 
-
+# Get the Q-value of the state-action pair
 def get_q_value(tile_coding, state, w):
     features = tile_coding.tile_encode(state[0], state[1])
     return (w.T @ features).flatten()
 
-
+# Softmax function
 def softmax(vec):
     pi = np.exp(vec - max(vec))
     pi = pi / pi.sum()
     return pi.reshape(-1, 1)
 
-
+# Get the expected feature vector
 def get_expected_feature(tile_coding, state, pi):
     features = tile_coding.tile_encode(state[0], state[1])
     return features @ pi.T
 
-
+# Estimate the policy
 def estimate_policy(env, tile_coding, theta, steps=1000):
     episodes_counter = 0
     i = 0
@@ -78,11 +77,12 @@ def estimate_policy(env, tile_coding, theta, steps=1000):
         episodes_counter += 1
     return episodes_counter
 
-
+# Run the QAC algorithm
 def QAC(steps=10000, gamma=0.95, alpha=0.02, beta=0.08):
     print("Running QAC...")
     env = gym.make('MountainCar-v0')
 
+    # Initialize the weights and the policy parameters
     tile_coding = TileCoding()
     num_features = tile_coding.num_tiles ** 2 * tile_coding.num_layers
     w = np.ones((num_features, 1))
@@ -105,6 +105,7 @@ def QAC(steps=10000, gamma=0.95, alpha=0.02, beta=0.08):
         features_mat[:, action] = features.flatten()
         theta += alpha * delta * (features_mat - get_expected_feature(tile_coding, state, pi))
 
+        # Estimate the policy every 100 steps
         if i % 100 == 0:
             policy_estimation.append(estimate_policy(env, tile_coding, theta))
 
