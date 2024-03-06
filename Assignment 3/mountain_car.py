@@ -4,14 +4,18 @@ from tqdm import tqdm
 
 
 class TileCoding:
+    # self.position_offsets = np.array([-0.1, 0, 0.1, 0.2])
+    # self.velocity_offsets = np.array([-0.01, 0, 0.01, 0.02])
+    # self.num_layers = 4
+    # self.num_tiles = 5
 
-    def __init__(self, num_layers, num_tiles):
+    def __init__(self):
         self.position_min, self.position_max = -1.2, 0.6
         self.velocity_min, self.velocity_max = -0.07, 0.07
-        self.position_offsets = np.array([-0.1, 0, 0.1, 0.2])
-        self.velocity_offsets = np.array([-0.01, 0, 0.01, 0.02])
-        self.num_layers = num_layers
-        self.num_tiles = num_tiles
+        self.position_offsets = np.array([-0.2, -0.1, 0, 0.1, 0.2, 0.3])
+        self.velocity_offsets = np.array([-0.02, -0.01, 0, 0.01, 0.02, 0.03])
+        self.num_layers = 6
+        self.num_tiles = 4
         self.layers_bins = []
         self.init_tilings()
 
@@ -45,12 +49,6 @@ def get_action(tile_coding, state, theta):
 
 
 def get_q_value(tile_coding, state, w):
-    """
-    Return V(S)
-    :param s: current state (p, v)
-    :param w: Weights of state Value function (
-    :return: state value
-    """
     features = tile_coding.tile_encode(state[0], state[1])
     return (w.T @ features).flatten()
 
@@ -61,8 +59,8 @@ def softmax(vec):
     return pi.reshape(-1, 1)
 
 
-def get_expected_feature(tile_coding, s, pi):
-    features = tile_coding.tile_encode(s[0], s[1])
+def get_expected_feature(tile_coding, state, pi):
+    features = tile_coding.tile_encode(state[0], state[1])
     return features @ pi.T
 
 
@@ -82,44 +80,44 @@ def estimate_policy(env, tile_coding, theta, steps=1000):
 
 
 def QAC(steps=10000, gamma=0.95, alpha=0.02, beta=0.08):
-    print("Starting QAC...")
+    print("Running QAC...")
     env = gym.make('MountainCar-v0')
 
-    tile_coding = TileCoding(num_layers=4, num_tiles=5)
+    tile_coding = TileCoding()
     num_features = tile_coding.num_tiles ** 2 * tile_coding.num_layers
     w = np.ones((num_features, 1))
     theta = np.ones((num_features, env.action_space.n))
 
     policy_estimation = []
 
-    s, info = env.reset()
+    state, info = env.reset()
     for i in tqdm(range(int(steps)), desc="Steps"):
 
-        action = get_action(tile_coding, s, theta)
+        action = get_action(tile_coding, state, theta)
         next_state, reward, terminated, truncated, info = env.step(action)
 
-        delta = reward + gamma * get_q_value(tile_coding, next_state, w) - get_q_value(tile_coding, s, w)
-        w += beta * delta * tile_coding.tile_encode(s[0], s[1])
+        delta = reward + gamma * get_q_value(tile_coding, next_state, w) - get_q_value(tile_coding, state, w)
+        w += beta * delta * tile_coding.tile_encode(state[0], state[1])
 
-        features = tile_coding.tile_encode(s[0], s[1])
+        features = tile_coding.tile_encode(state[0], state[1])
         pi = softmax(theta.T @ features)
-        F_mat = np.zeros((num_features, env.action_space.n))
-        F_mat[:, action] = features.flatten()
-        theta += alpha * delta * (F_mat - get_expected_feature(tile_coding, s, pi))
+        features_mat = np.zeros((num_features, env.action_space.n))
+        features_mat[:, action] = features.flatten()
+        theta += alpha * delta * (features_mat - get_expected_feature(tile_coding, state, pi))
 
         if i % 100 == 0:
             policy_estimation.append(estimate_policy(env, tile_coding, theta))
 
-        s = next_state
+        state = next_state
         if terminated or truncated:
-            s, info = env.reset()
+            state, info = env.reset()
 
     return w, theta, policy_estimation
 
 
 def play(theta):
     env = gym.make('MountainCar-v0', render_mode='human')
-    tile_coding = TileCoding(num_layers=4, num_tiles=5)
+    tile_coding = TileCoding()
     state, info = env.reset()
     while True:
         action = get_action(tile_coding, state, theta)

@@ -35,7 +35,7 @@ def get_q_value(state, action, w):
 
 
 def QAC(steps=10000, gamma=0.95, alpha=0.5, beta=0.5):
-    env = gym.make('MountainCar-v0', render_mode='human')
+    env = gym.make('MountainCar-v0')
     n_features = features_table.tiling_size ** 2 * features_table.layers * features_table.action_size
     theta = np.ones(n_features)
     w = np.ones(n_features)
